@@ -33,8 +33,12 @@
 #include "render/Renderer.h"
 #include "render/SongSpec.h"
 
+#ifdef _WIN32
 #include <windows.h>
 #include <shellapi.h>
+#elif defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
 
 #include <algorithm>
 #include <cctype>
@@ -56,9 +60,23 @@ using as::json;
 namespace {
 
 fs::path executableDir() {
+#ifdef _WIN32
     wchar_t buffer[MAX_PATH];
     const DWORD length = GetModuleFileNameW(nullptr, buffer, MAX_PATH);
     return fs::path(std::wstring(buffer, length)).parent_path();
+#elif defined(__APPLE__)
+    uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::string buffer(size, '\0');
+    if (_NSGetExecutablePath(buffer.data(), &size) != 0) return fs::current_path();
+    std::error_code ec;
+    fs::path resolved = fs::canonical(fs::path(buffer.c_str()), ec);
+    return ec ? fs::path(buffer.c_str()).parent_path() : resolved.parent_path();
+#else
+    std::error_code ec;
+    fs::path resolved = fs::canonical("/proc/self/exe", ec);
+    return ec ? fs::current_path() : resolved.parent_path();
+#endif
 }
 
 std::string assetDir(const std::string& override) {
@@ -409,6 +427,7 @@ int cmdAnalyze(const std::vector<std::string>& args, const std::vector<std::stri
 // The command line as UTF-8 (Windows hands main() the ANSI code page, which loses characters of
 // cover titles such as umlauts outside it); elsewhere argv is used as is.
 std::vector<std::string> utf8Args(int argc, char** argv) {
+#ifdef _WIN32
     std::vector<std::string> out;
     int n = 0;
     LPWSTR* w = CommandLineToArgvW(GetCommandLineW(), &n);
@@ -424,6 +443,10 @@ std::vector<std::string> utf8Args(int argc, char** argv) {
     }
     if (w) LocalFree(w);
     return out;
+#else
+    // macOS/Linux terminals already hand argv to us as UTF-8.
+    return std::vector<std::string>(argv + 1, argv + argc);
+#endif
 }
 
 // Album cover PNG (art/Cover.h). Text options are read from the UTF-8 command line; --spec reads

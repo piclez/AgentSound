@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
 #include <limits>
 #include <map>
@@ -72,7 +73,8 @@ std::shared_ptr<const WavChannels> readCached(const std::string& path) {
     std::error_code se, te;
     const auto size = fs::file_size(fs::path(file), se);
     const auto time = fs::last_write_time(fs::path(file), te);
-    key += '|' + std::to_string(se ? 0 : size) + '|' + std::to_string(te ? 0 : time.time_since_epoch().count());
+    const std::int64_t timeCount = static_cast<std::int64_t>(time.time_since_epoch().count());
+    key += '|' + std::to_string(se ? std::uintmax_t{0} : size) + '|' + std::to_string(te ? std::int64_t{0} : timeCount);
     std::lock_guard<std::mutex> lock(mu);
     if (const auto it = cache.find(key); it != cache.end()) return it->second;
     auto wav = std::make_shared<const WavChannels>(readWavChannels(file));
